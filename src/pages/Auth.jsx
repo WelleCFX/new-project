@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../state/store";
+import { supabase } from '../lib/supabase.js';
 
 export default function AuthPage() {
   const { signIn, signUp } = useStore();
@@ -38,10 +39,13 @@ export default function AuthPage() {
     }
   };
 
-  function startOAuth(provider) {
-    // Ще го включим след 1 стъпка ↓
-    alert("Социален вход включваме след минута 🙂");
-  }
+  async function startOAuth(provider) {
+  if (provider !== 'google') return; // засега само Google
+  await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin } // връщаме се в приложението
+  });
+}
 
   return (
     <section className="max-w-md mx-auto">

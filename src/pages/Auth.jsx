@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useStore } from "../state/store";
-import { supabase } from '../lib/supabase.js';
+import { useStore } from "../state/store.jsx";          // 👈 изрично .jsx
+import { supabase } from "../lib/supabase.js";          // 👈 изрично .js
 
 export default function AuthPage() {
   const { signIn, signUp } = useStore();
@@ -16,51 +16,76 @@ export default function AuthPage() {
   });
   const [login, setLogin] = useState({ email: "", password: "" });
   const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSignup = async (e) => {
     e.preventDefault();
     setMsg("");
+    setLoading(true);
     try {
       await signUp(form);
       nav("/");
     } catch (err) {
       setMsg(err.message || "Грешка при регистрация");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSignin = async (e) => {
     e.preventDefault();
     setMsg("");
+    setLoading(true);
     try {
       await signIn(login);
       nav("/");
     } catch (err) {
       setMsg("Невалиден имейл или парола");
+    } finally {
+      setLoading(false);
     }
   };
 
-  async function startOAuth(provider) {
-  if (provider !== 'google') return; // засега само Google
-  await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.origin } // връщаме се в приложението
-  });
-}
+  // Google OAuth
+  const startGoogle = async (e) => {
+    e.preventDefault(); // да не сабмитва формата
+    setMsg("");
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin, // връща към твоя сайт
+        },
+      });
+      // ще има redirect; не нужен nav()
+    } catch (err) {
+      console.error("Google OAuth error:", err);
+      setMsg("Грешка при Google вход.");
+    }
+  };
 
   return (
     <section className="max-w-md mx-auto">
       <div className="bg-white border rounded-2xl p-6">
         <div className="flex gap-2 mb-4">
-          <button onClick={() => setTab("signin")} className="px-3 py-1.5 rounded-lg text-sm border">
+          <button
+            type="button"
+            onClick={() => setTab("signin")}
+            className={`px-3 py-1.5 rounded-lg text-sm border ${
+              tab === "signin" ? "bg-indigo-600 text-white border-indigo-600" : "hover:bg-gray-50"
+            }`}
+          >
             Вход
-          </button>
-          <button onClick={() => setTab("signup")} className="px-3 py-1.5 rounded-lg text-sm border">
-            Регистрация
           </button>
         </div>
 
         {/* Social buttons */}
-        <button onClick={() => startOAuth("google")} className="h-10 rounded-xl border hover:bg-gray-50">
+        <button
+          type="button"
+          onClick={startGoogle}
+          className="h-10 rounded-xl border hover:bg-gray-50"
+          disabled={loading}
+        >
           Влез с Google
         </button>
 
@@ -70,20 +95,77 @@ export default function AuthPage() {
 
         {tab === "signin" ? (
           <form className="grid gap-3" onSubmit={handleSignin}>
-            <input placeholder="Имейл" value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} />
-            <input placeholder="Парола" type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} />
-            {msg && <p className="text-red-500 text-sm">{msg}</p>}
-            <button className="h-10 bg-indigo-600 text-white rounded-xl">Вход</button>
+            <input
+              className="h-10 px-3 rounded-xl border"
+              placeholder="Имейл"
+              type="email"
+              value={login.email}
+              onChange={(e) => setLogin({ ...login, email: e.target.value })}
+              required
+            />
+            <input
+              className="h-10 px-3 rounded-xl border"
+              placeholder="Парола"
+              type="password"
+              value={login.password}
+              onChange={(e) => setLogin({ ...login, password: e.target.value })}
+              required
+            />
+            {msg && <p className="text-red-500 text-sm p-2 rounded-xl border bg-red-50">{msg}</p>}
+            <button
+              className="h-10 bg-indigo-600 text-white rounded-xl disabled:opacity-60"
+              disabled={loading}
+            >
+              Вход
+            </button>
           </form>
         ) : (
           <form className="grid gap-3" onSubmit={handleSignup}>
-            <input placeholder="Име" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} />
-            <input placeholder="Имейл" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <input placeholder="Потребителско име" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-            <input placeholder="Парола" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-            {msg && <p className="text-red-500 text-sm">{msg}</p>}
-            <button className="h-10 bg-indigo-600 text-white rounded-xl">Регистрация</button>
+            <input
+              className="h-10 px-3 rounded-xl border"
+              placeholder="Име"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+            />
+            <input
+              className="h-10 px-3 rounded-xl border"
+              type="date"
+              value={form.birthDate}
+              onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
+              required
+            />
+            <input
+              className="h-10 px-3 rounded-xl border"
+              placeholder="Имейл"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              required
+            />
+            <input
+              className="h-10 px-3 rounded-xl border"
+              placeholder="Потребителско име"
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              required
+            />
+            <input
+              className="h-10 px-3 rounded-xl border"
+              placeholder="Парола"
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              required
+              minLength={6}
+            />
+            {msg && <p className="text-red-500 text-sm p-2 rounded-xl border bg-red-50">{msg}</p>}
+            <button
+              className="h-10 bg-indigo-600 text-white rounded-xl disabled:opacity-60"
+              disabled={loading}
+            >
+              Регистрация
+            </button>
           </form>
         )}
       </div>

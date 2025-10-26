@@ -16,6 +16,12 @@ function Protected({ children }) {
   return children;
 }
 
+// ➜ ако има сесия, /auth да редиректва към /
+function AuthGate({ children }) {
+  const { session } = useStore();
+  return session ? <Navigate to="/" replace /> : children;
+}
+
 export default function App() {
   return (
     <StoreProvider>
@@ -23,7 +29,7 @@ export default function App() {
         <Header />
         <main className="max-w-3xl mx-auto px-4 py-8">
           <Routes>
-            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/auth" element={<AuthGate><AuthPage /></AuthGate>} />
             <Route path="/" element={<Protected><HomePage /></Protected>} />
             <Route path="/account" element={<Protected><AccountPage /></Protected>} />
             <Route path="/fortune" element={<Protected><FortunePage /></Protected>} />

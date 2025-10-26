@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useStore } from "../state/store.jsx";          // 👈 изрично .jsx
-import { supabase } from "../lib/supabase.js";          // 👈 изрично .js
+import { useStore } from "../state/store.jsx";
+import { supabase } from "../lib/supabase.js";
 
 export default function AuthPage() {
-  const { signIn, signUp, session } = useStore();       // 👈 ВЗИМАМЕ session
+  const { signIn, signUp, session } = useStore();
   const nav = useNavigate();
   const [tab, setTab] = useState("signin");
   const [form, setForm] = useState({
@@ -18,11 +18,9 @@ export default function AuthPage() {
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // ✅ Ако потребителят вече е логнат → пренасочваме от /auth към /
+  // ако вече сме логнати → махаме от /auth
   useEffect(() => {
-    if (session) {
-      nav("/", { replace: true });
-    }
+    if (session) nav("/", { replace: true });
   }, [session, nav]);
 
   const handleSignup = async (e) => {
@@ -53,24 +51,21 @@ export default function AuthPage() {
     }
   };
 
-  // Google OAuth
   const startGoogle = async (e) => {
     e.preventDefault();
     setMsg("");
     try {
       await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: window.location.origin,
-        },
+        options: { redirectTo: window.location.origin },
       });
+      // redirect към Google → после се връщаме
     } catch (err) {
       console.error("Google OAuth error:", err);
       setMsg("Грешка при Google вход.");
     }
   };
 
-  // Ако session все още се зарежда -> връща null докато стане redirect-а
   if (session) return null;
 
   return (
@@ -81,14 +76,26 @@ export default function AuthPage() {
             type="button"
             onClick={() => setTab("signin")}
             className={`px-3 py-1.5 rounded-lg text-sm border ${
-              tab === "signin" ? "bg-indigo-600 text-white border-indigo-600" : "hover:bg-gray-50"
+              tab === "signin"
+                ? "bg-indigo-600 text-white border-indigo-600"
+                : "hover:bg-gray-50"
             }`}
           >
             Вход
           </button>
+          <button
+            type="button"
+            onClick={() => setTab("signup")}
+            className={`px-3 py-1.5 rounded-lg text-sm border ${
+              tab === "signup"
+                ? "bg-indigo-600 text-white border-indigo-600"
+                : "hover:bg-gray-50"
+            }`}
+          >
+            Регистрация
+          </button>
         </div>
 
-        {/* Social buttons */}
         <button
           type="button"
           onClick={startGoogle}
@@ -120,7 +127,9 @@ export default function AuthPage() {
               onChange={(e) => setLogin({ ...login, password: e.target.value })}
               required
             />
-            {msg && <p className="text-red-500 text-sm p-2 rounded-xl border bg-red-50">{msg}</p>}
+            {msg && (
+              <p className="text-red-500 text-sm p-2 rounded-xl border bg-red-50">{msg}</p>
+            )}
             <button
               className="h-10 bg-indigo-600 text-white rounded-xl disabled:opacity-60"
               disabled={loading}
@@ -168,7 +177,9 @@ export default function AuthPage() {
               required
               minLength={6}
             />
-            {msg && <p className="text-red-500 text-sm p-2 rounded-xl border bg-red-50">{msg}</p>}
+            {msg && (
+              <p className="text-red-500 text-sm p-2 rounded-xl border bg-red-50">{msg}</p>
+            )}
             <button
               className="h-10 bg-indigo-600 text-white rounded-xl disabled:opacity-60"
               disabled={loading}

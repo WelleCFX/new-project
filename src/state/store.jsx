@@ -1,175 +1,91 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { supabase } from '../lib/supabase'
 
-const STORAGE_KEY = "luckymvp_state_v1";
-const todayKey = () => new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-export const FORTUNES = [
-  "Щастието е на една крачка.",
-  "Очаквай приятна изненада.",
-  "Ново запознанство ще ти донесе късмет.",
-  "Смелите ги чака успех.",
-  "Днес е ден за ново начало.",
-  "Усмивката е твоят талисман.",
-  "Вярвай си — можеш повече.",
-  "Радостта идва в малки дози.",
-  "Ще получиш комплимент, който чакаш.",
-  "Време е да сбъднеш малка мечта.",
-  "Скоро ще чуеш добра новина.",
-  "Талантът ти ще бъде забелязан.",
-  "Помощ ще дойде неочаквано.",
-  "Ще намериш нещо изгубено.",
-  "Съдбата обича смелите.",
-  "Днес късметът е на твоя страна.",
-  "Сърцето ти знае пътя.",
-  "Избери радостта.",
-  "Времето е твоят съюзник.",
-  "Ще получиш подарък на добра воля.",
-];
+const StoreCtx = createContext(null)
 
-function defaultState() {
-  return {
-    authedUser: null, // {name, birthDate, email, username}
-    hearts: 0,
-    daily: {
-      date: todayKey(),
-      freeDrawsUsed: 0, // от 3
-      adsWatched: 0, // от 10
-      extraDrawsEarned: 0, // 1 видео = 1 допълнително теглене
-      drawsDoneToday: 0,
-    },
-    history: [], // [{ts, fortune}]
-    fortunesDrawn: [], // масив; при нужда го правим на Set
-    achievements: {
-      opened5: false,
-      opened20: false,
-      hearts100: false,
-    },
-    users: [], // демо: [{email, password, name, birthDate, username}]
-  };
-}
-
-function persist(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function hydrate() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return defaultState();
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return defaultState();
-  }
-}
-
-function applyAchievements(s) {
-  let add = 0;
-  const opened = s.history.length;
-  const nextAch = { ...s.achievements };
-  if (!nextAch.opened5 && opened >= 5) { nextAch.opened5 = true; add += 5; }
-  if (!nextAch.opened20 && opened >= 20) { nextAch.opened20 = true; add += 5; }
-  if (!nextAch.hearts100 && s.hearts >= 100) { nextAch.hearts100 = true; add += 5; }
-  if (add > 0) return { ...s, hearts: s.hearts + add, achievements: nextAch };
-  return s;
-}
-
-const StoreCtx = createContext(null);
 
 export function StoreProvider({ children }) {
-  const [state, setState] = useState(hydrate);
+const [session, setSession] = useState(null)
+const [profile, setProfile] = useState(null) // {id,name,birth_date,email,username,hearts}
+const [history, setHistory] = useState([]) // [{drawn_at, text}]
+const [daily, setDaily] = useState({ free_used: 0, ads_watched: 0, extra_earned: 0, draws_done: 0, day: null })
+const [loading, setLoading] = useState(true)
 
-  // дневен ресет при първо зареждане
-  useEffect(() => {
-    setState((s) => {
-      const today = todayKey();
-      if (s.daily.date !== today) {
-        const next = {
-          ...s,
-          daily: { date: today, freeDrawsUsed: 0, adsWatched: 0, extraDrawsEarned: 0, drawsDoneToday: 0 },
-        };
-        persist(next);
-        return next;
-      }
-      persist(s);
-      return s;
-    });
-  }, []);
 
-  // персист при всяка промяна
-  useEffect(() => { persist(state); }, [state]);
+// следим auth
+useEffect(() => {
+supabase.auth.getSession().then(({ data }) => setSession(data.session || null))
+const { data: sub } = supabase.auth.onAuthStateChange((_ev, s) => setSession(s))
+return () => sub.subscription.unsubscribe()
+}, [])
 
-  // Actions
-  const signUp = (payload) => {
-    const { name, birthDate, email, username, password } = payload;
-    setState((s) => {
-      const exists = s.users.some((u) => u.email.toLowerCase() === email.toLowerCase());
-      if (exists) throw new Error("email_exists");
-      const newUser = { name, birthDate, email, username, password };
-      return { ...s, users: [...s.users, newUser], authedUser: { name, birthDate, email, username } };
-    });
-  };
 
-  const signIn = ({ email, password }) => {
-    setState((s) => {
-      const u = s.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-      if (!u || u.password !== password) throw new Error("invalid_credentials");
-      return { ...s, authedUser: { name: u.name, birthDate: u.birthDate, email: u.email, username: u.username } };
-    });
-  };
+// зареждаме профил + дневни + история
+useEffect(() => {
+async function load() {
+if (!session) { setProfile(null); setHistory([]); setDaily({}); setLoading(false); return }
+setLoading(true)
+const uid = session.user.id
+const [{ data: p }, { data: d }, { data: h }] = await Promise.all([
+supabase.from('profiles').select('*').eq('id', uid).single(),
+supabase.from('daily_stats').select('*').eq('user_id', uid).eq('day', new Date().toISOString().slice(0,10)).maybeSingle(),
+supabase.from('draws').select('drawn_at, fortunes(text)').eq('user_id', uid).order('drawn_at', { ascending:false }).limit(50)
+])
+setProfile(p || null)
+setDaily(d || { day: new Date().toISOString().slice(0,10), free_used:0, ads_watched:0, extra_earned:0, draws_done:0 })
+setHistory((h||[]).map(r => ({ drawn_at: r.drawn_at, text: r.fortunes?.text })))
+setLoading(false)
+}
+load()
+}, [session])
 
-  const signOut = () => setState((s) => ({ ...s, authedUser: null }));
 
-  const watchAd = () => {
-    setState((s) => {
-      if (s.daily.adsWatched >= 10) return s; // лимит
-      return {
-        ...s,
-        daily: {
-          ...s.daily,
-          adsWatched: s.daily.adsWatched + 1,
-          extraDrawsEarned: s.daily.extraDrawsEarned + 1,
-        },
-      };
-    });
-  };
-
-  const drawFortune = () => {
-    let chosen = null;
-    setState((s) => {
-      const freeLeft = Math.max(0, 3 - s.daily.freeDrawsUsed);
-      const extraLeft = Math.max(0, s.daily.extraDrawsEarned - (s.daily.drawsDoneToday - s.daily.freeDrawsUsed));
-      const canDraw = freeLeft + extraLeft > 0;
-      if (!canDraw) return s;
-
-      const drawnSet = new Set(s.fortunesDrawn);
-      const pool = FORTUNES.filter((f) => !drawnSet.has(f));
-      if (pool.length === 0) return s;
-
-      chosen = pool[Math.floor(Math.random() * pool.length)];
-      const usedFree = s.daily.freeDrawsUsed < 3 ? s.daily.freeDrawsUsed + 1 : s.daily.freeDrawsUsed;
-      const usedDraws = s.daily.drawsDoneToday + 1;
-
-      let next = {
-        ...s,
-        hearts: s.hearts + 2,
-        daily: { ...s.daily, freeDrawsUsed: usedFree, drawsDoneToday: usedDraws },
-        history: [{ ts: Date.now(), fortune: chosen }, ...s.history],
-        fortunesDrawn: [...drawnSet, chosen],
-      };
-
-      next = applyAchievements(next);
-      return next;
-    });
-    return chosen; // за UI
-  };
-
-  const value = useMemo(() => ({ state, signUp, signIn, signOut, watchAd, drawFortune }), [state]);
-
-  return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>;
+const signUp = async ({ name, birthDate, email, username, password }) => {
+const { data: auth, error } = await supabase.auth.signUp({ email, password })
+if (error) throw error
+const uid = auth.user.id
+await supabase.from('profiles').upsert({ id: uid, name, birth_date: birthDate, email, username }).eq('id', uid)
 }
 
-export function useStore() {
-  const ctx = useContext(StoreCtx);
-  if (!ctx) throw new Error("useStore must be used within StoreProvider");
-  return ctx;
+
+const signIn = async ({ email, password }) => {
+const { error } = await supabase.auth.signInWithPassword({ email, password })
+if (error) throw error
 }
+
+
+const signOut = async () => { await supabase.auth.signOut() }
+
+
+const watchAd = async () => {
+// увеличаваме дневните по нужда
+const uid = session.user.id
+const today = new Date().toISOString().slice(0,10)
+const row = daily?.day === today ? daily : { user_id: uid, day: today, free_used:0, ads_watched:0, extra_earned:0, draws_done:0 }
+if (row.ads_watched >= 10) return
+const next = { ...row, ads_watched: row.ads_watched + 1, extra_earned: row.extra_earned + 1 }
+await supabase.from('daily_stats').upsert({ ...next, user_id: uid, day: today })
+setDaily(next)
+}
+
+
+const drawFortune = async () => {
+const token = session?.access_token
+const res = await fetch('/api/draw-fortune', { headers: { Authorization: `Bearer ${token}` } })
+const data = await res.json()
+if (!res.ok) throw new Error(data.error || 'DRAW_ERROR')
+// обновяваме локално
+setHistory(h => [{ drawn_at: new Date().toISOString(), text: data.text }, ...h])
+setProfile(p => ({ ...p, hearts: (p?.hearts ?? 0) + 2 }))
+setDaily(d => ({ ...d, draws_done: (d.draws_done||0) + 1, free_used: Math.min(3, (d.free_used||0) + 1) }))
+return data.text
+}
+
+
+const value = useMemo(() => ({ session, profile, history, daily, loading, signUp, signIn, signOut, watchAd, drawFortune }), [session, profile, history, daily, loading])
+return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
+}
+
+
+export function useStore() { const ctx = useContext(StoreCtx); if (!ctx) throw new Error('useStore in provider'); return ctx }

@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useStore } from "../state/store.jsx";          // 👈 изрично .jsx
 import { supabase } from "../lib/supabase.js";          // 👈 изрично .js
 
 export default function AuthPage() {
-  const { signIn, signUp } = useStore();
+  const { signIn, signUp, session } = useStore();       // 👈 ВЗИМАМЕ session
   const nav = useNavigate();
   const [tab, setTab] = useState("signin");
   const [form, setForm] = useState({
@@ -17,6 +17,13 @@ export default function AuthPage() {
   const [login, setLogin] = useState({ email: "", password: "" });
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // ✅ Ако потребителят вече е логнат → пренасочваме от /auth към /
+  useEffect(() => {
+    if (session) {
+      nav("/", { replace: true });
+    }
+  }, [session, nav]);
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -48,21 +55,23 @@ export default function AuthPage() {
 
   // Google OAuth
   const startGoogle = async (e) => {
-    e.preventDefault(); // да не сабмитва формата
+    e.preventDefault();
     setMsg("");
     try {
       await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: window.location.origin, // връща към твоя сайт
+          redirectTo: window.location.origin,
         },
       });
-      // ще има redirect; не нужен nav()
     } catch (err) {
       console.error("Google OAuth error:", err);
       setMsg("Грешка при Google вход.");
     }
   };
+
+  // Ако session все още се зарежда -> връща null докато стане redirect-а
+  if (session) return null;
 
   return (
     <section className="max-w-md mx-auto">
